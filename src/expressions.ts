@@ -16,6 +16,7 @@ export function commonExpr(value: SourceArray, index: number): Lexer.Token {
     negateExpr(value, index) ||
     parenExpr(value, index) ||
     castExpr(value, index);
+    // jsonPathExpr(value, index);
 
   if (!token) {
     return;
@@ -56,6 +57,7 @@ export function boolCommonExpr(value: SourceArray, index: number): Lexer.Token {
     notExpr(value, index) ||
     commonExpr(value, index) ||
     boolParenExpr(value, index);
+    // jsonbExpr(value, index);
 
   if (!token) {
     return;
@@ -70,7 +72,8 @@ export function boolCommonExpr(value: SourceArray, index: number): Lexer.Token {
       leExpr(value, token.next) ||
       gtExpr(value, token.next) ||
       geExpr(value, token.next) ||
-      hasExpr(value, token.next);
+      hasExpr(value, token.next)||
+      inExpr(value, token.next);
 
     if (commonMoreExpr) {
       token.value = {
@@ -114,6 +117,26 @@ export function boolCommonExpr(value: SourceArray, index: number): Lexer.Token {
     }
   }
 
+  return token;
+}
+
+export function jsonPathExpr(value: SourceArray, index: number): Lexer.Token {
+  let token = null;
+  let start = index;
+  let re = /^([\w'#{}\->\[\]]{5,})[\s,]+/;
+  let str = Utils.stringify(value, start, value.length);
+  // if values does not include a > - abort
+  if (!str || !str.includes(">")) {
+    return;
+  }
+
+  let match = null
+  let matches = str.match(re);
+  if (matches && matches.length > 0) match = matches[1];
+
+  if (match) {
+    token = Lexer.tokenize(value, start, start + match.length, match, Lexer.TokenType.JsonPathExpression); // JsonBExpression vs CommonExpression
+  }
   return token;
 }
 
@@ -239,6 +262,8 @@ export function hasExpr(value: SourceArray, index: number): Lexer.Token {
   return leftRightExpr(value, index, 'has', Lexer.TokenType.HasExpression);
 }
 
+export function inExpr(value: SourceArray, index: number): Lexer.Token { return leftRightExpr(value, index, "in", Lexer.TokenType.InExpression); }
+
 export function addExpr(value: SourceArray, index: number): Lexer.Token {
   return leftRightExpr(value, index, 'add', Lexer.TokenType.AddExpression);
 }
@@ -343,7 +368,9 @@ export function boolMethodCallExpr(
     endsWithMethodCallExpr(value, index) ||
     startsWithMethodCallExpr(value, index) ||
     containsMethodCallExpr(value, index) ||
-    intersectsMethodCallExpr(value, index)
+    intersectsMethodCallExpr(value, index) ||
+    containsAnyMethodCallExpr(value, index)
+    // jsonbMethodCallExpr(value, index)
   );
 }
 export function methodCallExpr(value: SourceArray, index: number): Lexer.Token {
@@ -377,6 +404,59 @@ export function methodCallExpr(value: SourceArray, index: number): Lexer.Token {
     nowMethodCallExpr(value, index)
   );
 }
+
+export function methodCallJsonBFactory(value: SourceArray, index: number, method: string, min?: number, max?: number): Lexer.Token {
+  if (typeof min === "undefined") min = 0;
+  if (typeof max === "undefined") max = min;
+
+  if (!Utils.equals(value, index, method)) return;
+  let start = index;
+  index += method.length;
+  let open = Lexer.OPEN(value, index);
+  if (!open) return;
+  index = open;
+  index = Lexer.BWS(value, index);
+  let parameters;
+  if (min > 0) {
+    parameters = [];
+    /*  let expr = commonExpr(value, index);
+     if (expr) {
+         parameters.push(expr.value);
+         index = expr.next;
+         index = Lexer.OWS(value, index); // allow for optional whitespace eg. shipto ->>
+     } else return; */
+
+    while (parameters.length < max) {
+      // let  expr = jsonValueExpr(value, index) || jsonObjectExpr(value, index) || commonExpr(value, index);
+      let  expr = commonExpr(value, index);
+      if (parameters.length < min && !expr) {
+        return;
+      }
+      if (expr) {
+        parameters.push(expr.value);
+        index = expr.next;
+
+        index = Lexer.OWS(value, index);
+        let comma = Lexer.COMMA(value, index);
+        if (comma) {
+          index = comma;
+          index = Lexer.OWS(value, index);
+        }
+
+      } else break;
+    }
+  }
+  index = Lexer.BWS(value, index);
+  let close = Lexer.CLOSE(value, index);
+  if (!close) return;
+  index = close;
+
+  return Lexer.tokenize(value, start, index, {
+    method: method,
+    parameters: parameters
+  }, Lexer.TokenType.MethodCallJsonExpression);
+}
+
 export function methodCallExprFactory(
   value: SourceArray,
   index: number,
@@ -446,12 +526,18 @@ export function methodCallExprFactory(
     Lexer.TokenType.MethodCallExpression
   );
 }
+
+// export function jsonbMethodCallExpr(value: SourceArray, index: number): Lexer.Token { return methodCallJsonBFactory(value, index, "jsonb", 2, 10); }
+
 export function containsMethodCallExpr(
   value: SourceArray,
   index: number
 ): Lexer.Token {
   return methodCallExprFactory(value, index, 'contains', 2);
 }
+
+export function containsAnyMethodCallExpr(value: SourceArray, index: number): Lexer.Token { return methodCallExprFactory(value, index, "containsAny", 2); }
+
 export function startsWithMethodCallExpr(
   value: SourceArray,
   index: number
@@ -1521,4 +1607,12 @@ export function rootExpr(value: SourceArray, index: number): Lexer.Token {
     },
     Lexer.TokenType.RootExpression
   );
+}
+
+export function jsonObjectExpr(value: SourceArray, index: number): Lexer.Token {
+  if (Utils.equals(value, index, "->")) return Lexer.tokenize(value, index, index + 2, "->", Lexer.TokenType.RefExpression);
+}
+
+export function jsonValueExpr(value: SourceArray, index: number): Lexer.Token {
+  if (Utils.equals(value, index, "->>")) return Lexer.tokenize(value, index, index + 3, "->>", Lexer.TokenType.RefExpression);
 }

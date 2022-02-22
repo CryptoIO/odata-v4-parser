@@ -50,6 +50,7 @@ export enum TokenType {
   PrimitiveFunctionImport = 'PrimitiveFunctionImport',
   PrimitiveCollectionFunctionImport = 'PrimitiveCollectionFunctionImport',
   CommonExpression = 'CommonExpression',
+  JsonPathExpression = 'JsonPathExpression',
   AndExpression = 'AndExpression',
   OrExpression = 'OrExpression',
   EqualsExpression = 'EqualsExpression',
@@ -65,9 +66,11 @@ export enum TokenType {
   DivExpression = 'DivExpression',
   ModExpression = 'ModExpression',
   NotExpression = 'NotExpression',
+  InExpression = 'InExpression',
   BoolParenExpression = 'BoolParenExpression',
   ParenExpression = 'ParenExpression',
   MethodCallExpression = 'MethodCallExpression',
+  MethodCallJsonExpression = 'MethodCallJsonExpression',
   IsOfExpression = 'IsOfExpression',
   CastExpression = 'CastExpression',
   NegateExpression = 'NegateExpression',
@@ -660,20 +663,15 @@ export function beginArray(value: SourceArray, index: number): number {
   return bws;
 }
 export function endArray(value: SourceArray, index: number): number {
-  let bws = BWS(value, index);
+  const bws = BWS(value, index);
   const start = index;
   index = bws;
-  if (Utils.equals(value, index, ']')) {
-    index++;
-  } else if (Utils.equals(value, index, '%5D')) {
-    index += 3;
-  }
-  if (index === bws) {
-    return start;
-  }
-
-  bws = BWS(value, index);
-  return bws;
+  if (Utils.equals(value, index, ']')) index++;
+  else if (Utils.equals(value, index, '%5D')) index += 3;
+  if (index === bws) return start;
+  return index;
+  // bws = BWS(value, index);
+  // return bws;
 }
 export function quotationMark(value: SourceArray, index: number): number {
   if (DQUOTE(value[index])) {

@@ -10,10 +10,12 @@ import { QueryOptionsToken } from './token';
 export const parserFactory = function(fn) {
   return function(source, options) {
     options = options || {};
-    const raw = new Uint16Array(source.length);
+    // Change (...) with in [...] in non-greedy mode
+    const replacedSrc = source.replace(/in \((.+?)\)/g, 'in [$1]');
+    const raw = new Uint16Array(replacedSrc.length);
     const pos = 0;
-    for (let i = 0; i < source.length; i++) {
-      raw[i] = source.charCodeAt(i);
+    for (let i = 0; i < replacedSrc.length; i++) {
+      raw[i] = replacedSrc.charCodeAt(i);
     }
     const result = fn(raw, pos, options.metadata);
     if (!result) {
