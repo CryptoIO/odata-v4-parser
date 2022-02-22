@@ -22,7 +22,8 @@ export const parserFactory = function(fn) {
       throw new Error(`Fail at ${pos}`);
     }
     if (result.next < raw.length) {
-      throw new Error(`Unexpected character at ${result.next}`);
+      const tokenArr = result.value.options;
+      throw new Error(`Invalid ${tokenArr[tokenArr.length - 1].type.toLowerCase()} query schema`);
     }
     return result;
   };
